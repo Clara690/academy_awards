@@ -1,5 +1,5 @@
 ---
-title: "Academy Awards"
+title: "Who's the Next Winner? Using Conditional Logistic Regression Model to Predict Results for Academy Awards"
 author: "Yun-Tsz Tsai"
 date-format: "MMMM DD, YYYY"
 date: last-modified
@@ -22,7 +22,19 @@ execute:
 
 # Introduction
 
-This study examines the correlation between having strong acting performance and winning Academy Awards for best picture.
+Academy Awards, also known as Oscars, is one of the most prestigious awards in the film industry. It is presented annually at the end of the year and before the results of Academy Awards are revealed, there are several other similar awards being awarded, for instance, Golden Globe Awards. The first Academy Awards was held in 1929, reviwing films made in 1928. Some of its awards go to individuals such as the actors and actresses in a film while some go to a film.   
+
+As actors and actresses will be evaluated on their performance in the film they participated, it is reasonale to assume that their peformance will also affect the evaluation of the film. Previous studies have shown that being nominated for other Oscars awards (e.g., best directing) or having won a non-Oscars award can have an impact on whether a film will subsequently win an Oscars. However, not all types of nominations seem to be equal. A study by <citation> shows that if the leading actress has been nominated for the best actress in a leading role, it might lower the possibility of the film winning a best picture.
+
+In this study, I will examine the correlation between having strong acting performance (i.e., either having been nominated for other Oscars awards or already won a non-Oscars) and winning Academy Awards for best picture, using conditional logistic regression model. Three hypotheses are formulated as follows,
+
+1. The total number of nominations will affect the possibility of a film winning best picture. 
+2. The performance of actors and actresses will affect the possibility of a film winning best picture.  
+3. Whether or not a file has won a non-Oscars will affect the possibility of a film winning best picture.
+
+In addition, predictions on the results of Oscars for 2025 will be presented using a model that best describes previous data.
+
+
 
 ```{r}
 #| message: false
@@ -44,38 +56,108 @@ col_types=cols(Name="c",Movie="c",.default="i"))
 oscars <- oscars %>%  
   filter(oscars$Year < 2006, oscars$PP == 1) %>% 
   # 1 = winning, 0 = not winning
-  mutate(Ch = ifelse(Ch == 1, 1, 0)) %>% 
-  mutate(GlodenG = ifelse((Gdr == 1) | (Gmc == 1), 1, 0))
-
-oscars %>% 
-  select(Movie, Gdr, Gmc, GlodenG)
+  mutate(Ch = ifelse(Ch == 1, 1, 0)) 
 ```
 
-# Data and Method
+# Data
+
+```{r}
+#| tbl-cap: 'Descriptive Data on Variables'
+#| label: tbl-descriptive
+#| message: false
+#| warning: false
+#| echo: false
+
+library(gtsummary)
+oscars %>% 
+  tbl_summary(by = Ch, include = c(Nom, Dir, Gdr, Gmc)) %>% 
+  add_overall() %>% 
+  modify_header(label ~ "**Variable**") %>% 
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Winning**") %>% 
+  bold_labels() %>% 
+  modify_table_body(
+    ~ .x %>% 
+      mutate(label = str_wrap(case_when(
+        label == "Nom" ~ "Oscar Nominations",
+        label == "Dir" ~ "Director Nomination",
+        label == "Gdr" ~ "Gloden Globe Drama",
+        label == "Gmc" ~ "Gloden Globe Musical/Comedy",
+        TRUE ~ label
+      ), width = 10))  
+  ) %>%
+  as_gt() %>% 
+  gt::tab_source_note(gt::md("*0 = Did not win Oscars*")) %>% 
+  gt::tab_source_note(gt::md("*1 = Won Oscars*")) %>% 
+   gt::tab_source_note(gt::md("*Data source Pardoe, I., & Simonton, D. K. (2008)*"))
+```
+
+```{r}
+#| layout: [[60], [60]]
+#| label: fig-distribution
+#| fig-cap-location: bottom
+#| fig-cap: 'Distributions of Variables by Winning or Not'
+#| fig-subcap:
+#|   - 'Total Nominations'
+#|   - 'Male and Female Actor Lead Nomination'
+#| message: false
+#| warning: false
+#| echo: false
+
+# unique value checker
+
+# vals = c('Nom', 'Dir', 'Aml', 'Afl', 'Gdr', 'Gmc')
+# 
+# for(val in vals){
+#   result <- sort(unique(oscars[[val]]))
+#   print(result)
+# }
+
+
+# the distribution of nominations
+oscars %>% 
+  count(Ch, Nom) %>% 
+  ggplot(aes(Nom, n)) +
+  theme_light() +
+  geom_col(fill = 'aquamarine') +
+  facet_wrap(vars(Ch), labeller = as_labeller(c(`0` = 'not winning', `1` = 'winning'))) +
+  labs(x = 'Number of Nominations',
+       y = 'Frequency',
+       caption = 'Data source Pardoe, I., & Simonton, D. K. (2008).') + theme(strip.background = element_rect(fill='cornflowerblue'))
+
+
+# the distribution of male and female lead nominations
+ # transform to a long table
+long_nominations <- oscars %>% 
+  select(Year, Ch, Aml, Afl) %>% 
+  pivot_longer(cols = c(Aml, Afl), names_to = 'category', 
+               values_to = 'nominations')
+
+long_nominations %>% 
+  ggplot(aes(x = nominations, fill = category)) + 
+  geom_bar(position = "dodge") + 
+  theme_light() +
+  facet_wrap(vars(Ch),labeller = as_labeller(c(`0` = 'not winning', `1` = 'winning'))) +
+  scale_fill_manual(values = c("Aml" = "skyblue", "Afl" = "pink"),
+                    labels = c("Aml" = "Male", "Afl" = "Female")) +
+  labs(x = 'Number of Male & Female Lead Nominations',
+       y = 'Count', fill = NULL,
+       caption = 'Data source Pardoe, I., & Simonton, D. K. (2008).') + theme(strip.background = element_rect(fill='cornflowerblue'))
+```
+
+# Method
 
 # Analysis
 
-How performances in male vs. female acting categories affect the best picture award.
-
--   select observations for the best picture awards
-
--   descriptive data
-
--   three models
-
-    -   table of the models
-
-    -   $X^2$ test
-
--   predictions (present in a table / figure)
-
 ```{r}
+#| tbl-cap: 'Odds from Conditional Logistic Regression Models'
+#| label: tbl-models
 #| message: false
 #| warning: false
 #| echo: false
 
 library(survival)
 library(modelsummary)
+library(gt)
 # model 1: assuming male and female acting performances have the same effect
 m1 <- clogit(Ch ~ Nom + Dir + I(Aml + Afl) + strata(Year), data = oscars)
 
@@ -83,23 +165,79 @@ m1 <- clogit(Ch ~ Nom + Dir + I(Aml + Afl) + strata(Year), data = oscars)
 m2 <- clogit(Ch ~ Nom + Dir + Aml + Afl + strata(Year), data = oscars)
 
 # model 3: add some additional variables for better predicton
-m3 <- clogit(Ch ~ Nom + Dir + Aml + Afl + GlodenG + strata(Year), data = oscars)
+m3 <- clogit(Ch ~ Nom + Dir + Aml + Afl + I(Gdr + Gmc) + strata(Year), data = oscars)
 models <- list(m1, m2, m3)
 
 # table of results from models
-modelsummary(models, stars = c('*' =.05, '**' =.01, '***' = .001))
+modelsummary(models, stars = c('*' =.05, '**' =.01, '***' = .001), 
+             fmt = 2, statistic = 'conf.int',
+             gof_omit = 'RMSE',
+             output = 'gt', exponentiate = TRUE,
+             coef_rename = c('Nomination', 'Director',
+                             'Actor & Actress', 'Actor', 'Actress',
+                             'Golden Globe')) %>% 
+ gt::tab_spanner(label = gt::md("**Model Specifications**"), 
+                 columns = everything()) %>% 
+   tab_source_note(
+    source_note = gt::md("*Source: Estimated based on author's calculations.*")) %>% 
+   tab_source_note(
+    source_note = gt::md("*Reference: Pardoe, I., & Simonton, D. K. (2008)*"))
+  
+
 ```
 
 ```{r}
-# unique value checker
+#| tbl-cap: 'Likelihood Ratio Test on Models '
+#| label: tbl-comparison
+#| message: false
+#| warning: false
+#| echo: false
 
-vals = c('Nom', 'Dir', 'Aml', 'Afl', 'GlodenG')
+# comparing two models
+library(stats)
+m1_m2 <- anova(m1, m2)
+m2_m3 <- anova(m2, m3)
 
-for(val in vals){
-  result <- sort(unique(oscars[[val]]))
-  print(result)
-}
+comparisons <- tibble('term' = c('Chisquare' , 'P-value'
+                      ),
+                      'Model 1' = c(NA, NA),
+                      'Model 2' = c(
+                        m1_m2$Chisq[2], m1_m2$`Pr(>|Chi|)`[2]),
+                      'Model 3' = c(
+                        m2_m3$Chisq[2], m2_m3$`Pr(>|Chi|)`[2])) 
+comparisons %>% 
+  gt() %>% 
+  tab_header(
+    title = md('Model Comparisions')
+  ) %>% 
+  fmt_number(
+    columns = c('Model 1', 'Model 2', 'Model 3'),
+    decimal = 2
+  ) %>% 
+  cols_label(
+    term = '',
+    `Model 1` = 'Model 1',
+    `Model 2` = 'Model 2',
+    `Model 3` = 'Model 3'
+  ) %>% 
+  cols_align(
+    align = 'center',
+    columns = everything()
+  ) %>% 
+  text_transform(
+    locations = cells_body(
+      columns = c(`Model 3`),
+      rows = term == "Chisquare"
+    ),
+    fn = function(x) paste0(x, '***')
+  ) %>% 
+  tab_footnote(gt::md('*** P < 0.01')) %>% 
+  tab_footnote(gt::md('The Likelihood ratio test for Model is not applicable as it is the most basic model in this analysis.')) %>% 
+  tab_footnote(gt::md("*Figures based on author's calculation*")) %>% 
+  tab_footnote(gt::md('*Reference: Pardoe, I., & Simonton, D. K. (2008)*')) 
 ```
+
+# Results
 
 ```{r}
 #| message: false
@@ -107,7 +245,6 @@ for(val in vals){
 #| echo: false
 
 # data for predictions
-
 oscars_2025 <- tibble(
     Movie = c("Anora", "Brutalist", "Unknown", "Conclave", "Emilia",     "DuneTwo", "StillHere", "NickleBoys", "Substance", "Wicked"),
     Year = rep(2000, 10),
@@ -117,17 +254,42 @@ oscars_2025 <- tibble(
     Dir = c(1, 1, 1, 0, 1, 0, 0, 0, 1, 0),
     Aml = c(0, 1, 1, 1, 0, 0, 0, 0, 0, 0),
     Afl = c(1, 0, 0, 0, 1, 0, 1, 0, 1, 1),
-    GlodenG = c(0, 1, 0, 0, 1, 0, 0, 0, 0, 0)
+    Gdr = c(0, 1, 0, 0, 0, 0, 0, 0, 0, 0),
+    Gmc = c(0, 0, 0, 0, 1, 0, 0, 0, 0, 0)
 )
 
 # predictions from model3
-oscars_2025 %>% 
+oscars_2025 <- oscars_2025 %>% 
   bind_cols(Za = predict(m3, type= "lp", newdata=.)) %>% 
   group_by(Year) %>% 
   mutate(Pr=exp(Za)/sum(exp(Za)))
- 
 ```
 
-# Results
+```{r}
+#| fig-align: 'center'
+#| fig-cap-location: bottom
+#| fig-cap: 'Predicted Probability of Winning Oscars Best Picture in 2025'
+#| label: fig-pred-graph
+#| message: false
+#| warning: false
+#| echo: false
+
+# visualization 
+library(ggplot2)
+library(scales)
+ggplot(oscars_2025, aes(x = reorder(Movie, Pr), 
+                        y = Pr, fill = Pr))+
+  geom_col() +
+  theme_minimal() +
+  theme(axis.title.x=element_blank(),
+    axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+    plot.margin = margin(10, 10, 30, 10)) +
+  scale_y_continuous(labels = percent_format()) +
+  scale_fill_gradient(labels = percent_format()) +
+  labs(y = '', 
+       fill = '',
+       caption = '\nResults based on Model 3.\n
+       Reference: Pardoe, I., & Simonton, D. K. (2008)') 
+```
 
 # Conclusions
