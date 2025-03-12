@@ -1,0 +1,133 @@
+---
+title: "Academy Awards"
+author: "Yun-Tsz Tsai"
+date-format: "MMMM DD, YYYY"
+date: last-modified
+format: pdf
+editor: visual
+crossref:
+  fig-title: '**Figure**'
+  fig-labels: arabic
+  title-delim: "**.**"
+  tbl-title: '**Table**'
+  tbl-labels: arabic
+execute: 
+  output: true
+  include: true
+  eval: true
+  echo: false
+  warning: false
+  error: false  
+---
+
+# Introduction
+
+This study examines the correlation between having strong acting performance and winning Academy Awards for best picture.
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+
+# load the data
+library(tidyverse)
+# read the data in 'Name' & 'Movie' as char and the rest as interger
+oscars<-read_csv('./oscars/oscars.csv',
+col_types=cols(Name="c",Movie="c",.default="i"))
+
+```
+
+```{r}
+# cleaning the data
+# remove data for 2006 as it's used for preditions in the original 
+# study
+oscars <- oscars %>%  
+  filter(oscars$Year < 2006, oscars$PP == 1) %>% 
+  # 1 = winning, 0 = not winning
+  mutate(Ch = ifelse(Ch == 1, 1, 0)) %>% 
+  mutate(GlodenG = ifelse((Gdr == 1) | (Gmc == 1), 1, 0))
+
+oscars %>% 
+  select(Movie, Gdr, Gmc, GlodenG)
+```
+
+# Data and Method
+
+# Analysis
+
+How performances in male vs. female acting categories affect the best picture award.
+
+-   select observations for the best picture awards
+
+-   descriptive data
+
+-   three models
+
+    -   table of the models
+
+    -   $X^2$ test
+
+-   predictions (present in a table / figure)
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+
+library(survival)
+library(modelsummary)
+# model 1: assuming male and female acting performances have the same effect
+m1 <- clogit(Ch ~ Nom + Dir + I(Aml + Afl) + strata(Year), data = oscars)
+
+# model 2: different effects for male and female acting performance 
+m2 <- clogit(Ch ~ Nom + Dir + Aml + Afl + strata(Year), data = oscars)
+
+# model 3: add some additional variables for better predicton
+m3 <- clogit(Ch ~ Nom + Dir + Aml + Afl + GlodenG + strata(Year), data = oscars)
+models <- list(m1, m2, m3)
+
+# table of results from models
+modelsummary(models, stars = c('*' =.05, '**' =.01, '***' = .001))
+```
+
+```{r}
+# unique value checker
+
+vals = c('Nom', 'Dir', 'Aml', 'Afl', 'GlodenG')
+
+for(val in vals){
+  result <- sort(unique(oscars[[val]]))
+  print(result)
+}
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+
+# data for predictions
+
+oscars_2025 <- tibble(
+    Movie = c("Anora", "Brutalist", "Unknown", "Conclave", "Emilia",     "DuneTwo", "StillHere", "NickleBoys", "Substance", "Wicked"),
+    Year = rep(2000, 10),
+    PP = rep(1, 10),
+    Ch = c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    Nom = c(6, 10, 9, 8, 13, 5, 3, 2, 5, 10),
+    Dir = c(1, 1, 1, 0, 1, 0, 0, 0, 1, 0),
+    Aml = c(0, 1, 1, 1, 0, 0, 0, 0, 0, 0),
+    Afl = c(1, 0, 0, 0, 1, 0, 1, 0, 1, 1),
+    GlodenG = c(0, 1, 0, 0, 1, 0, 0, 0, 0, 0)
+)
+
+# predictions from model3
+oscars_2025 %>% 
+  bind_cols(Za = predict(m3, type= "lp", newdata=.)) %>% 
+  group_by(Year) %>% 
+  mutate(Pr=exp(Za)/sum(exp(Za)))
+ 
+```
+
+# Results
+
+# Conclusions
